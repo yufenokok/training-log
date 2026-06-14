@@ -1,0 +1,2436 @@
+<!--
+  ═══════════════════════════════════════════════════════════════════════
+  TRAINING LOG TEMPLATE — Garmin Style — Yufen's Resistance Training
+  ═══════════════════════════════════════════════════════════════════════
+
+  This is a working template. The sessions data, body composition data,
+  and KPIs are CURRENT as of last update (see current-data.json for the
+  authoritative source).
+
+  TO UPDATE THIS DASHBOARD:
+  1. Read references/current-data.json for the canonical data state
+  2. Replace the `sessions` array (search: "const sessions = [")
+  3. Replace the `gripData` and `plankData` arrays if grip/plank changed
+  4. Update the KPI cards in HTML (search: "kpi-row")
+  5. Update body composition rings if new InBody data exists
+  6. Update the Hero strip tagline if narrative changed
+  7. Update the "36 SESSIONS" pill counts and section labels
+
+  KEY DESIGN INVARIANTS (do NOT change without explicit user request):
+  - Garmin cyan-on-navy palette (--cyan: #00b9e8, --bg: #0a1419)
+  - Roboto Condensed + Roboto Mono + Noto Sans TC fonts
+  - Exercise grouping via canonicalName() — DO NOT fragment "下拉系列" etc.
+  - Assist exercise inversion — pull-up assist DECREASES = improvement
+  - Sparkline shows weight trend; for assist, inverted color semantics
+  - Cold break dashed line between sessions 17 and 18
+  - Phase II magenta tint starts after session 24
+  ═══════════════════════════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STRENGTH LOG · GARMIN STYLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a1419;
+  --bg-2: #0f1e26;
+  --card: #15252f;
+  --card-2: #1b2f3c;
+  --line: #25404f;
+  --line-bright: #355366;
+  --text: #ffffff;
+  --text-dim: #8aa4b3;
+  --text-mute: #5a7385;
+  --cyan: #00b9e8;
+  --cyan-bright: #00d4ff;
+  --cyan-glow: rgba(0, 185, 232, 0.45);
+  --cyan-dim: #0a6680;
+  --cyan-bg: rgba(0, 185, 232, 0.08);
+  --orange: #ff7733;
+  --red: #ff3d3d;
+  --yellow: #ffb547;
+  --green: #6ec56e;
+  --magenta: #d65aab;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Roboto Condensed', 'Noto Sans TC', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.4;
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0, 185, 232, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(0, 185, 232, 0.03) 0%, transparent 40%);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 24px 28px 100px;
+}
+
+/* ===== Top bar ===== */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 32px; height: 32px;
+  background: var(--cyan);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 18px;
+  color: var(--bg);
+  font-weight: 900;
+  clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);
+}
+
+.brand-name {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  color: var(--text);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.brand-name .sub {
+  color: var(--cyan);
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+.status-pills {
+  display: flex;
+  gap: 6px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.pill {
+  padding: 5px 10px;
+  border: 1px solid var(--line-bright);
+  color: var(--text-dim);
+  background: var(--card);
+  display: flex; align-items: center; gap: 6px;
+}
+
+.pill.live { color: var(--cyan); border-color: var(--cyan-dim); background: var(--cyan-bg); }
+
+.pill.live::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: var(--cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--cyan-glow);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ===== Hero strip ===== */
+.hero-strip {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 24px 28px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-strip::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%; width: 4px;
+  background: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan-glow);
+}
+
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-title {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1;
+}
+
+.hero-title .accent { color: var(--cyan); }
+
+.hero-meta {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+}
+
+.hero-tagline {
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  max-width: 760px;
+}
+
+/* ===== KPI row ===== */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+  position: relative;
+}
+
+.kpi-card.highlight {
+  background: linear-gradient(135deg, rgba(0, 185, 232, 0.12) 0%, var(--card) 50%);
+  border-color: var(--cyan-dim);
+}
+
+.kpi-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.kpi-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.kpi-card.highlight .kpi-label { color: var(--cyan); }
+
+.kpi-trend {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.kpi-trend.up { color: var(--cyan); }
+.kpi-trend.flat { color: var(--text-dim); }
+.kpi-trend.warn { color: var(--yellow); }
+
+.kpi-value {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+}
+
+.kpi-card.highlight .kpi-value { color: var(--cyan); }
+
+.kpi-value .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-mute);
+  margin-left: 4px;
+}
+
+.kpi-foot {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+}
+
+/* ===== Section heading ===== */
+.section {
+  margin-bottom: 28px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cyan-dim);
+  position: relative;
+}
+
+.section-head::before {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 1px;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan-glow);
+}
+
+.section-title {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-title .num {
+  color: var(--cyan);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.section-tag {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ===== BODY COMPOSITION RINGS ===== */
+.body-comp {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 24px;
+}
+
+.body-comp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--line-bright);
+}
+
+.body-comp-date {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-mute);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.body-comp-date .strong {
+  color: var(--text);
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.body-comp-status {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--yellow);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border: 1px solid var(--yellow);
+  font-weight: 600;
+}
+
+.rings-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .rings-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.ring-card {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  padding: 16px 12px;
+  text-align: center;
+}
+
+.ring-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.ring-svg-wrap {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  margin: 0 auto;
+}
+
+.ring-svg { transform: rotate(-90deg); }
+
+.ring-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.ring-value {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+}
+
+.ring-value .small {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.ring-sub {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+
+.ring-zone {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-top: 10px;
+  text-transform: uppercase;
+}
+
+.zone-safe { color: var(--cyan); }
+.zone-warn { color: var(--yellow); }
+.zone-danger { color: var(--red); }
+
+.ring-cutoff {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  color: var(--text-mute);
+  margin-top: 2px;
+}
+
+.body-comp-note {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: var(--bg-2);
+  border-left: 3px solid var(--cyan);
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.body-comp-note strong { color: var(--cyan); font-weight: 600; }
+
+/* ===== Chart card ===== */
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 20px 24px 16px;
+}
+
+.chart-container {
+  position: relative;
+  height: 380px;
+}
+
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.legend-row .l-item {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.l-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+}
+
+/* ===== Mon vs Thu ===== */
+.compare-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 28px;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.compare-card .divider-v {
+  width: 1px; height: 110px; background: var(--line-bright);
+}
+
+.compare-col { text-align: center; }
+
+.compare-col .day {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.compare-col.mon .day { color: var(--cyan); }
+.compare-col.thu .day { color: var(--orange); }
+
+.compare-col .big {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.compare-col.mon .big { color: var(--cyan); }
+.compare-col.thu .big { color: var(--orange); }
+
+.compare-col .meta {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.compare-note {
+  grid-column: 1 / -1;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line-bright);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.7;
+  font-family: 'Noto Sans TC', sans-serif;
+}
+
+.compare-note strong { color: var(--text); }
+.compare-note em { color: var(--cyan); font-style: normal; font-weight: 700; }
+
+@media (max-width: 768px) {
+  .compare-card { grid-template-columns: 1fr; gap: 24px; }
+  .compare-card .divider-v { display: none; }
+  .compare-col .big { font-size: 44px; }
+}
+
+/* ===== Mini charts ===== */
+.mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .mini-grid { grid-template-columns: 1fr; }
+}
+
+.mini-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 18px 22px;
+}
+
+.mini-card .mini-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line-bright);
+}
+
+.mini-card h3 {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.mini-card .desc {
+  font-size: 10px;
+  color: var(--text-mute);
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.mini-chart-container {
+  position: relative;
+  height: 180px;
+}
+
+/* ===== EXERCISE EXPLORER (NEW: cards + sparklines + filter + search) ===== */
+.explorer-filter {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.filter-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-family: 'Roboto Condensed', 'Noto Sans TC', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border: 1px solid var(--line-bright);
+  background: var(--bg-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.chip:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.chip.active {
+  background: var(--cyan);
+  color: var(--bg);
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan-glow);
+}
+
+.chip .count {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  font-weight: 600;
+}
+
+.chip.active .count {
+  color: var(--bg);
+  opacity: 0.7;
+}
+
+.body-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.bd-chest { background: #ff7733; }
+.bd-back { background: #00b9e8; }
+.bd-legs { background: #ffb547; }
+.bd-shoulders { background: #d65aab; }
+.bd-arms { background: #6ec56e; }
+.bd-core { background: #aaa; }
+.bd-fullbody { background: #ff3d3d; }
+
+.search-wrap {
+  flex: 1;
+  min-width: 240px;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--line-bright);
+  color: var(--text);
+  padding: 8px 12px 8px 36px;
+  font-family: 'Roboto Condensed', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input::placeholder {
+  color: var(--text-mute);
+  font-size: 12px;
+}
+
+.search-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-mute);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.result-count {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.result-count .num { color: var(--cyan); font-weight: 700; }
+
+/* ===== Exercise cards ===== */
+.exercise-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ex-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 18px 22px;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.ex-card:hover {
+  border-color: var(--line-bright);
+}
+
+.ex-card.milestone {
+  border-left: 3px solid var(--cyan);
+  padding-left: 19px;
+}
+
+.ex-card.new-ex {
+  border-left: 3px solid var(--magenta);
+  padding-left: 19px;
+}
+
+.ex-card.hidden { display: none; }
+
+.ex-card-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.ex-card-left {
+  min-width: 0;
+}
+
+.ex-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ex-card-name {
+  font-family: 'Roboto Condensed', 'Noto Sans TC', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.ex-tag {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  padding: 3px 8px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  font-weight: 700;
+}
+
+.ex-tag.part-chest { color: #ff7733; }
+.ex-tag.part-back { color: #00b9e8; }
+.ex-tag.part-legs { color: #ffb547; }
+.ex-tag.part-shoulders { color: #d65aab; }
+.ex-tag.part-arms { color: #6ec56e; }
+.ex-tag.part-core { color: var(--text-dim); }
+.ex-tag.part-fullbody { color: #ff3d3d; }
+.ex-tag.assist { color: var(--magenta); background: rgba(214, 90, 171, 0.1); }
+.ex-tag.phase2 { color: var(--cyan); background: var(--cyan-bg); }
+
+.ex-card-meta {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-mute);
+  letter-spacing: 0.05em;
+}
+
+.ex-card-meta .strong { color: var(--text-dim); font-weight: 600; }
+
+.ex-card-right {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ex-card-latest-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  color: var(--text-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.ex-card-latest-value {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--cyan);
+  margin-top: 2px;
+}
+
+.ex-card-latest-value .u {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.ex-card-latest-date {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+
+.ex-card-latest-note {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  color: var(--text-mute);
+  margin-top: 2px;
+  letter-spacing: 0.05em;
+  font-style: italic;
+}
+
+/* Sparkline area */
+.spark-row {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-bright);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.spark-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--text-mute);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  width: 50px;
+}
+
+.spark-svg {
+  flex-shrink: 0;
+  width: 160px;
+  height: 36px;
+}
+
+.spark-delta {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spark-delta.up { color: var(--cyan); }
+.spark-delta.down { color: var(--red); }
+.spark-delta.flat { color: var(--text-dim); }
+.spark-delta.up-assist { color: var(--cyan); }  /* 輔助減少 = 進步 */
+
+.spark-only-one {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  font-style: italic;
+}
+
+/* Expand history */
+.expand-btn {
+  margin-top: 12px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s;
+}
+
+.expand-btn:hover { color: var(--cyan); }
+
+.expand-btn .arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 10px;
+}
+
+.expand-btn.open .arrow { transform: rotate(90deg); }
+
+.history-table {
+  display: none;
+  margin-top: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+
+.history-table.show { display: block; }
+
+.history-row {
+  display: grid;
+  grid-template-columns: 50px 75px 140px 1fr 70px;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+
+.history-row:last-child { border-bottom: none; }
+
+.history-row.header {
+  background: var(--card-2);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 6px 14px;
+}
+
+.history-row .session-n {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.history-row .date {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.history-row .ex-actual {
+  font-family: 'Noto Sans TC', 'Roboto Condensed', sans-serif;
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-row .detail {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.history-row .detail .note {
+  display: block;
+  color: var(--cyan);
+  font-style: italic;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.history-row .max-w {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--cyan);
+  text-align: right;
+}
+
+.no-results {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-mute);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ===== Session log (kept brief) ===== */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.log-row {
+  background: var(--card);
+  display: grid;
+  grid-template-columns: 70px 100px 1fr 110px;
+  gap: 18px;
+  padding: 14px 18px;
+  align-items: start;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.log-row:hover { background: var(--card-2); }
+
+.log-row.milestone {
+  background: linear-gradient(90deg, rgba(0, 185, 232, 0.12) 0%, var(--card) 50%);
+  border-left: 3px solid var(--cyan);
+  padding-left: 15px;
+}
+.log-row.new_exercise {
+  background: linear-gradient(90deg, rgba(214, 90, 171, 0.08) 0%, var(--card) 50%);
+  border-left: 3px solid var(--magenta);
+  padding-left: 15px;
+}
+
+.log-num {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 0.9;
+  color: var(--text);
+}
+.log-row.milestone .log-num { color: var(--cyan); }
+.log-row.new_exercise .log-num { color: var(--magenta); }
+.log-row.progress .log-num { color: var(--yellow); }
+.log-row.regression .log-num { color: var(--red); }
+
+.log-num .label {
+  display: block;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  margin-top: 3px;
+  font-weight: 700;
+}
+
+.log-date {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding-top: 4px;
+  font-weight: 600;
+}
+.log-date .day {
+  display: block;
+  font-size: 9px;
+  color: var(--text-mute);
+  margin-top: 4px;
+  letter-spacing: 0.15em;
+}
+
+.log-content { padding-top: 4px; }
+
+.log-exercises {
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ex-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ex-name { font-weight: 600; color: var(--text); }
+.ex-detail { font-family: 'Roboto Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.ex-note-inline { font-size: 10px; color: var(--cyan); font-style: italic; }
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+.t {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 8px;
+  padding: 2px 7px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  font-weight: 700;
+}
+.t.milestone { color: var(--cyan); }
+.t.progress { color: var(--yellow); }
+.t.regression { color: var(--red); }
+.t.new_exercise { color: var(--magenta); }
+.t.note { color: var(--text-mute); }
+
+.log-volume { text-align: right; padding-top: 4px; }
+.log-volume .label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  font-weight: 700;
+}
+.log-volume .value {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+.log-volume .value .u {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-mute);
+  margin-left: 2px;
+}
+
+.log-divider {
+  background: var(--bg-2);
+  padding: 14px 20px;
+  text-align: center;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.log-divider.phase {
+  background: linear-gradient(90deg, rgba(0, 185, 232, 0.15) 0%, var(--bg-2) 100%);
+  color: var(--cyan);
+}
+.log-divider.cold { color: var(--text-mute); }
+
+@media (max-width: 768px) {
+  .log-row { grid-template-columns: 50px 1fr; gap: 12px; }
+  .log-date, .log-volume { grid-column: 1 / -1; text-align: left; padding-left: 62px; }
+  .log-num { font-size: 28px; }
+  .ex-card-head { grid-template-columns: 1fr; gap: 12px; }
+  .ex-card-right { text-align: left; }
+  .ex-card-name { font-size: 18px; }
+  .ex-card-latest-value { font-size: 28px; }
+  .spark-svg { width: 120px; }
+  .history-row {
+    grid-template-columns: 40px 1fr 60px;
+    grid-template-areas: "n a w" "n d w";
+    gap: 4px 10px;
+    padding: 10px 12px;
+  }
+  .history-row .session-n { grid-area: n; }
+  .history-row .ex-actual { grid-area: a; font-size: 13px; }
+  .history-row .date { grid-area: a; font-size: 10px; opacity: 0.7; align-self: end; }
+  .history-row .detail { grid-area: d; font-size: 11px; }
+  .history-row .max-w { grid-area: w; font-size: 14px; }
+  .history-row.header { grid-template-columns: 40px 1fr 60px; grid-template-areas: "n a w"; }
+  .history-row.header > div:nth-child(2) { display: none; }
+  .history-row.header > div:nth-child(4) { display: none; }
+}
+
+/* ===== Footer ===== */
+.footer {
+  margin-top: 60px;
+  padding: 36px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  text-align: center;
+  position: relative;
+}
+
+.footer::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 3px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+
+.footer .quote {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  margin-bottom: 12px;
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.footer .quote .hl { color: var(--cyan); }
+
+.footer .sig {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  margin-top: 14px;
+  font-weight: 700;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">S</div>
+      <div class="brand-name">STRENGTH<span class="sub">/ 2026 PHASE II</span></div>
+    </div>
+    <div class="status-pills">
+      <div class="pill live">RECORDING</div>
+      <div class="pill">36 SESSIONS</div>
+      <div class="pill">PHASE 2/3</div>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero-strip">
+    <div class="hero-top">
+      <div class="hero-title">FROM <span class="accent">ZERO</span> TO <span class="accent">DEADLIFT</span></div>
+      <div class="hero-meta">SESSION 02 → 36 · 2026.01 — ONGOING</div>
+    </div>
+    <div class="hero-tagline">
+      一月起步,三月感冒中斷,四月歸位完成 24 堂,五月把壺鈴硬舉 16kg 寫進課表,六月推到 24kg 完成壺鈴階段,下次進入啞鈴硬舉。Phase II 進行式。
+    </div>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="kpi-row">
+    <div class="kpi-card highlight">
+      <div class="kpi-head">
+        <div class="kpi-label">KETTLEBELL DL</div>
+        <div class="kpi-trend up">▲ NEW PR</div>
+      </div>
+      <div class="kpi-value">24<span class="unit">KG × 15 × 3</span></div>
+      <div class="kpi-foot">06.04 · SESSION 34 · 壺鈴階段畢業</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-head">
+        <div class="kpi-label">PLANK HOLD</div>
+        <div class="kpi-trend up">▲ +62 SEC</div>
+      </div>
+      <div class="kpi-value">75<span class="unit">SEC</span></div>
+      <div class="kpi-foot">13s → 60s → 75s · 4 個月</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-head">
+        <div class="kpi-label">TOTAL VOLUME</div>
+        <div class="kpi-trend up">▲ CUMULATIVE</div>
+      </div>
+      <div class="kpi-value" id="total-volume">—</div>
+      <div class="kpi-foot">累積總訓練量 · 36 SESSIONS</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-head">
+        <div class="kpi-label">PEAK SESSION</div>
+        <div class="kpi-trend up">SESSION 35</div>
+      </div>
+      <div class="kpi-value" id="peak-volume">—</div>
+      <div class="kpi-foot">2026.06.09 · 機械捲腹 + 深蹲日</div>
+    </div>
+  </div>
+
+  <!-- Body composition rings -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">01</span>BODY COMPOSITION / 身體組成</div>
+      <div class="section-tag">FIG.01 · INBODY BASELINE</div>
+    </div>
+    <div class="body-comp">
+      <div class="body-comp-header">
+        <div class="body-comp-date">
+          <span class="strong">BASELINE</span>2026.01.10 · 重訓前 7 天 · TANITA MC-780
+        </div>
+        <div class="body-comp-status">WARN ZONE · SKINNY FAT</div>
+      </div>
+      <div class="rings-grid">
+
+        <div class="ring-card">
+          <div class="ring-label">SMI · 肌少症指標</div>
+          <div class="ring-svg-wrap">
+            <svg class="ring-svg" width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#25404f" stroke-width="10"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#ff3d3d" stroke-width="2"
+                stroke-dasharray="2 337" stroke-dashoffset="-141" opacity="0.7"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#00b9e8" stroke-width="10"
+                stroke-dasharray="267 339" stroke-linecap="round"
+                style="filter: drop-shadow(0 0 6px rgba(0,185,232,0.5))"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-value">6.70</div>
+              <div class="ring-sub">kg/m²</div>
+            </div>
+          </div>
+          <div class="ring-zone zone-safe">▲ SAFE</div>
+          <div class="ring-cutoff">CUTOFF: 5.7 · +1.0</div>
+        </div>
+
+        <div class="ring-card">
+          <div class="ring-label">MUSCLE MASS · 肌肉量</div>
+          <div class="ring-svg-wrap">
+            <svg class="ring-svg" width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#25404f" stroke-width="10"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#6ec56e" stroke-width="3"
+                stroke-dasharray="40 339" stroke-dashoffset="-260" opacity="0.4"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#ffb547" stroke-width="10"
+                stroke-dasharray="267 339" stroke-linecap="round"
+                style="filter: drop-shadow(0 0 6px rgba(255,181,71,0.4))"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-value">39.4</div>
+              <div class="ring-sub">kg</div>
+            </div>
+          </div>
+          <div class="ring-zone zone-warn">◆ LOW EDGE</div>
+          <div class="ring-cutoff">RANGE: 39.0-44.4</div>
+        </div>
+
+        <div class="ring-card">
+          <div class="ring-label">BODY FAT · 體脂率</div>
+          <div class="ring-svg-wrap">
+            <svg class="ring-svg" width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#25404f" stroke-width="10"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#6ec56e" stroke-width="3"
+                stroke-dasharray="158 339" stroke-dashoffset="-83" opacity="0.4"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#ff7733" stroke-width="10"
+                stroke-dasharray="214 339" stroke-linecap="round"
+                style="filter: drop-shadow(0 0 6px rgba(255,119,51,0.4))"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-value">31.6<span class="small">%</span></div>
+              <div class="ring-sub">body fat</div>
+            </div>
+          </div>
+          <div class="ring-zone zone-warn">◆ HIGH EDGE</div>
+          <div class="ring-cutoff">IDEAL: 22-36%</div>
+        </div>
+
+        <div class="ring-card">
+          <div class="ring-label">VISCERAL FAT · 內臟脂肪</div>
+          <div class="ring-svg-wrap">
+            <svg class="ring-svg" width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#25404f" stroke-width="10"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#ff3d3d" stroke-width="2"
+                stroke-dasharray="2 337" stroke-dashoffset="-226" opacity="0.7"/>
+              <circle cx="65" cy="65" r="54" fill="none" stroke="#00b9e8" stroke-width="10"
+                stroke-dasharray="158 339" stroke-linecap="round"
+                style="filter: drop-shadow(0 0 6px rgba(0,185,232,0.5))"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-value">7</div>
+              <div class="ring-sub">index</div>
+            </div>
+          </div>
+          <div class="ring-zone zone-safe">▲ NORMAL</div>
+          <div class="ring-cutoff">WARN: ≥ 10</div>
+        </div>
+
+      </div>
+      <div class="body-comp-note">
+        <strong>分析:</strong> 1/10 baseline 顯示「skinny fat / 隱性肥胖」狀態 — BMI 21.7 看似正常,但肌肉佔比偏低、體脂偏高。SMI 6.70 在女性肌少症 cutoff (5.7) 之上,但持續流失風險高。<strong>重訓開始時機正確</strong>。
+        <br><br>
+        <strong>體重變化 (起床空腹):</strong> 61.3 → 62 (重訓 2 週,主要為肝醣+水分) → 62 穩定 → 接近 63 (3-4 個月後緩慢上升,真實肌肉)。<strong>褲子變鬆 + 體重略升 + 力量飛躍</strong> = 多重證據指向 body recomposition。
+      </div>
+    </div>
+  </section>
+
+  <!-- Main volume chart -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">02</span>VOLUME CURVE / 訓練量軌跡</div>
+      <div class="section-tag">FIG.02 · KG × REPS</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-container">
+        <canvas id="volumeChart"></canvas>
+      </div>
+      <div class="legend-row">
+        <div class="l-item"><span class="l-dot" style="background:#00b9e8"></span>週一</div>
+        <div class="l-item"><span class="l-dot" style="background:#ff7733;border-radius:0;transform:rotate(45deg);width:9px;height:9px;"></span>週四</div>
+        <div class="l-item"><span class="l-dot" style="background:#00b9e8;clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);width:13px;height:13px;border-radius:0;"></span>里程碑</div>
+        <div class="l-item"><span class="l-dot" style="background:#ffb547"></span>進步</div>
+        <div class="l-item"><span class="l-dot" style="background:transparent;border:2px solid #ff3d3d"></span>退步</div>
+        <div class="l-item"><span class="l-dot" style="background:#d65aab"></span>新動作</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mon vs Thu -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">03</span>MON vs THU / 訓練節奏</div>
+      <div class="section-tag">FIG.03 · WEEKLY PATTERN</div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-col mon">
+        <div class="day">MONDAY · 多部位日</div>
+        <div class="big" id="mon-avg">—</div>
+        <div class="meta" id="mon-meta">—</div>
+      </div>
+      <div class="divider-v"></div>
+      <div class="compare-col thu">
+        <div class="day">THURSDAY · 腿部 + 大重量日</div>
+        <div class="big" id="thu-avg">—</div>
+        <div class="meta" id="thu-meta">—</div>
+      </div>
+      <div class="compare-note">
+        <strong>觀察:</strong>週四(腿部日)單項重量更大,但因為動作項目通常較少,<em>總訓練量反而比週一低</em>。腿部肌群大、單組負荷高,疲勞感和肌肉刺激其實更強。volume 是看「總工作量」,不是「強度」。
+      </div>
+    </div>
+  </section>
+
+  <!-- Mini charts -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">04</span>ISOMETRIC HOLDS / 等長收縮</div>
+      <div class="section-tag">FIG.04 · GRIP & CORE</div>
+    </div>
+    <div class="mini-grid">
+      <div class="mini-card">
+        <div class="mini-head">
+          <h3>GRIP HANG · 懸吊握力</h3>
+          <div class="desc">SEC · FIRST SET</div>
+        </div>
+        <div class="mini-chart-container"><canvas id="gripChart"></canvas></div>
+      </div>
+      <div class="mini-card">
+        <div class="mini-head">
+          <h3>PLANK · 棒式</h3>
+          <div class="desc">SEC · FIRST SET</div>
+        </div>
+        <div class="mini-chart-container"><canvas id="plankChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EXERCISE EXPLORER (cards + sparklines + filter + search) -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">05</span>EXERCISE EXPLORER / 動作軌跡</div>
+      <div class="section-tag">FIG.05 · PER-EXERCISE HISTORY</div>
+    </div>
+
+    <div class="explorer-filter">
+      <div class="filter-label">部位</div>
+      <div class="filter-chips" id="filter-chips"></div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="search-input" placeholder="動作關鍵字 (例:深蹲、下拉、硬舉)">
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 4px;">
+      <div class="result-count">顯示 <span class="num" id="result-num">—</span> / <span id="total-num">—</span> 個動作</div>
+      <div class="result-count" id="filter-status">全部</div>
+    </div>
+
+    <div class="exercise-cards" id="exercise-cards"></div>
+    <div class="no-results" id="no-results" style="display:none">沒有符合條件的動作</div>
+  </section>
+
+  <!-- Session log -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">06</span>SESSION LOG / 每堂明細</div>
+      <div class="section-tag" id="log-section-tag">36 ENTRIES</div>
+    </div>
+    <div class="log-list" id="log-list"></div>
+    <div class="no-results" id="log-no-results" style="display:none;margin-top:0;">沒有符合條件的訓練紀錄</div>
+  </section>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="quote">
+      「壺鈴硬舉 <span class="hl">16KG → 24KG</span>,壺鈴階段畢業。<br>
+      下一堂進入啞鈴硬舉,<br>
+      <span class="hl">Phase II 的故事正在被寫下。</span>」
+    </div>
+    <div class="sig">PHASE I · COMPLETE  ·  PHASE II · IN PROGRESS  ·  PHASE III · UNLOCK</div>
+  </div>
+
+</div>
+
+<script>
+// ===== Body part definitions =====
+const BODY_PARTS = {
+  chest:     { label: '胸',     en: 'CHEST',     color: '#ff7733' },
+  back:      { label: '背',     en: 'BACK',      color: '#00b9e8' },
+  legs:      { label: '腿/臀',  en: 'LEGS',      color: '#ffb547' },
+  shoulders: { label: '肩',     en: 'SHOULDERS', color: '#d65aab' },
+  arms:      { label: '手臂',   en: 'ARMS',      color: '#6ec56e' },
+  core:      { label: '核心',   en: 'CORE',      color: '#8aa4b3' },
+  fullbody:  { label: '全身',   en: 'FULL BODY', color: '#ff3d3d' },
+};
+
+function getBodyParts(exName) {
+  const n = exName;
+  if (/划船機|划雪機/.test(n)) return ['fullbody'];
+  if (/胸推|伏地挺身/.test(n)) return ['chest'];
+  if (/下拉|划船|引體向上/.test(n)) return ['back'];
+  if (/硬舉|六角槓深蹲/.test(n)) return ['legs', 'back'];
+  if (/腿後勾|深蹲|腿推機|髖|弓箭步/.test(n)) return ['legs'];
+  if (/肩推|飛鳥|前平舉|側平舉/.test(n)) return ['shoulders'];
+  if (/二頭|三頭|彎舉|伸三頭/.test(n)) return ['arms'];
+  if (/ABX|捲腹|死蟲|棒式|平板|側抬腿|摸腹|轉體/.test(n)) return ['core'];
+  if (/農夫走路|懸吊握力/.test(n)) return ['fullbody'];
+  return [];
+}
+
+// ===== Sessions =====
+const sessions = [
+  { num: 2, date: "2026-01-08", volume: 1080, exercises: [
+    { name: "半機械二頭彎舉", detail: "—×15×4", note: "肌耐力不夠" },
+    { name: "機械腿後勾", detail: "18kg×15×4" },
+  ], notes: ["肌耐力不夠"], tags: [] },
+  { num: 3, date: "2026-01-12", volume: 1420, exercises: [
+    { name: "Cable直槓三頭下壓", detail: "14kg×20×4" },
+    { name: "高腳杯深蹲", detail: "5kg×15×4", note: "膝蓋內扣" },
+  ], notes: ["膝蓋內扣"], tags: [] },
+  { num: 4, date: "2026-01-14", volume: 2220, exercises: [
+    { name: "髖內收", detail: "23kg×15×4" },
+    { name: "滑輪下拉", detail: "14kg×15×4" },
+  ], notes: ["耐力不足", "棒式 60s/33s/46s"], tags: [] },
+  { num: 5, date: "2026-01-19", volume: 2700, exercises: [
+    { name: "水平划船", detail: "18kg×15×4" },
+    { name: "髖外展(臀)", detail: "27kg×15×4" },
+  ], notes: ["棒式 60s×3"], tags: [] },
+  { num: 6, date: "2026-01-22", volume: 968, exercises: [
+    { name: "半機械平胸推", detail: "5kg×12×4", note: "手肘外開" },
+    { name: "直槓三頭下壓", detail: "14kg × 20/20/12 遞減" },
+  ], notes: ["握力要加強"], tags: [] },
+  { num: 7, date: "2026-01-28", volume: 560, exercises: [
+    { name: "機械側飛鳥", detail: "7kg×20×4" },
+    { name: "ABX", detail: "—×12×4", note: "教練有幫忙" },
+    { name: "死蟲式", detail: "10×4" },
+  ], notes: [], tags: [] },
+  { num: 8, date: "2026-02-02", volume: 840, exercises: [
+    { name: "額狀面下拉", detail: "9kg×15×4" },
+    { name: "趴姿腿後勾", detail: "5kg×15×4" },
+    { name: "ABX", detail: "—×12×4" },
+  ], notes: ["練離心", "棒式 60s"], tags: [] },
+  { num: 9, date: "2026-02-05", volume: 2415, exercises: [
+    { name: "機械肩推", detail: "9kg × 15/15/15/10 遞減" },
+    { name: "機械腿推機", detail: "32kg×15×4" },
+  ], notes: ["懸吊握力:3→8→10→15→12s"], tags: ["progress"] },
+  { num: 10, date: "2026-02-08", volume: 1215, exercises: [
+    { name: "水平划船", detail: "20kg×15×3 遞減" },
+    { name: "ABX(離心)", detail: "—×15×4" },
+    { name: "機械胸推", detail: "7kg×15×3 遞減" },
+  ], notes: [], tags: [] },
+  { num: 11, date: "2026-02-11", volume: 2070, exercises: [
+    { name: "滑輪下拉", detail: "18kg×15×3 遞減" },
+    { name: "機械深蹲", detail: "14kg×15×3 遞減" },
+    { name: "直槓三頭下壓", detail: "14kg×15×3 遞減" },
+  ], notes: ["手軸開、會喘"], tags: ["regression"] },
+  { num: 12, date: "2026-02-19", volume: 2280, exercises: [
+    { name: "史密斯伏地挺身", detail: "7→8格 × 10/15/12/9 遞減" },
+    { name: "矢狀面下拉", detail: "11kg×15×4" },
+    { name: "坐姿腿後勾", detail: "27kg×15×4", note: "進步 9kg" },
+  ], notes: ["懸吊握力 20/14/10/8s"], tags: ["progress"] },
+  { num: 13, date: "2026-02-23", volume: 1740, exercises: [
+    { name: "機械引體向上", detail: "輔助68kg × 15×4", note: "輔助大於體重,volume 計 0" },
+    { name: "機械捲腹", detail: "29kg×15×4" },
+  ], notes: ["棒式 60s"], tags: [] },
+  { num: 14, date: "2026-02-26", volume: 870, exercises: [
+    { name: "半機械二頭彎舉", detail: "2.5kg×15×4" },
+    { name: "高腳杯深蹲", detail: "12kg×15×4" },
+    { name: "半機械肩推", detail: "—×15×4" },
+  ], notes: ["手肘不穩定、聳肩", "握力 24/22/14/10s"], tags: [] },
+  { num: 15, date: "2026-03-02", volume: 2454, exercises: [
+    { name: "水平划船", detail: "23kg × 15/15/15/13 遞減", note: "離心背鬆掉" },
+    { name: "過頭三頭下壓", detail: "14kg×20×4 (嘗試18kg)" },
+    { name: "ABX", detail: "—×15×4" },
+  ], notes: ["練離心,向心進步"], tags: ["progress"] },
+  { num: 16, date: "2026-03-05", volume: 1396, exercises: [
+    { name: "機械肩推", detail: "9kg×20×3 遞減" },
+    { name: "半機械上胸推", detail: "1.25kg × 15/12/10 遞減" },
+    { name: "壺鈴深蹲", detail: "18kg×15×3 遞減" },
+  ], notes: ["姿勢進步", "棒式 60/42/35s"], tags: ["progress"] },
+  { num: 17, date: "2026-03-09", volume: 3216, exercises: [
+    { name: "對握滑輪下拉", detail: "20.5kg × 15/15/12" },
+    { name: "趴姿腿後勾", detail: "9kg×20 + 14kg×15×2" },
+    { name: "機械捲腹", detail: "39kg×15×3" },
+  ], notes: ["懸吊握力 18/11/9/5s"], tags: [] },
+  { num: 18, date: "2026-04-09", volume: 1120, isReturn: true, exercises: [
+    { name: "機械引體向上", detail: "輔助68kg × 18/18/15", note: "輔助大於體重,volume 計 0" },
+    { name: "直槓三頭下壓", detail: "14kg×20×4" },
+  ], notes: ["感冒休息一個月後第一堂", "側棒式 13/15/30s"], tags: [] },
+  { num: 19, date: "2026-04-13", volume: 1682, exercises: [
+    { name: "史密斯伏地挺身", detail: "8格 × 17/13/11 遞減" },
+    { name: "壺鈴深蹲", detail: "20kg×15×3" },
+    { name: "水平划船", detail: "23kg × 15/11/8 遞減" },
+  ], notes: ["懸吊握力 12/8/4s", "下堂課核心加強"], tags: ["regression"] },
+  { num: 20, date: "2026-04-16", volume: 2790, exercises: [
+    { name: "ABX", detail: "—×15×1 (半程)" },
+    { name: "機械捲腹", detail: "39kg×15×3" },
+    { name: "半機械肩推", detail: "—× 20/17/14" },
+    { name: "機械深蹲", detail: "23kg×15×3" },
+  ], notes: ["手肘不穩定、聳肩", "握力 21/11/10/8s"], tags: [] },
+  { num: 21, date: "2026-04-21", volume: 694, exercises: [
+    { name: "啞鈴側飛鳥", detail: "2kg×20×3 遞減" },
+    { name: "滑輪下拉", detail: "20.5kg × 15/13 遞減" },
+    { name: "平板抬腿(30°)", detail: "—×15×4" },
+  ], notes: ["懸吊握力 23/12s"], tags: [] },
+  { num: 22, date: "2026-04-23", volume: 113, exercises: [
+    { name: "半機械俯身划船", detail: "2.5kg×15×3 遞減" },
+    { name: "弓箭步(臀)", detail: "—×15×3" },
+  ], notes: ["懸吊握力 20/11/6/4s"], tags: [] },
+  { num: 24, date: "2026-04-30", volume: 75, exercises: [
+    { name: "史密斯伏地挺身", detail: "7格 × 10/7/8 遞減" },
+    { name: "弓箭步(臀)", detail: "2.5kg×15×2" },
+  ], notes: ["側棒式進階 35s/26s", "第一階段完賽"], tags: ["milestone"] },
+  { num: 25, date: "2026-05-04", volume: 3178, phase: 2, exercises: [
+    { name: "平板摸腹", detail: "—×15×3" },
+    { name: "機械胸推", detail: "7kg×15×3 遞減" },
+    { name: "對握滑輪下拉", detail: "23kg × 15/14/12" },
+    { name: "機械腿推機", detail: "32kg×15×4" },
+  ], notes: ["懸吊握力 12/6/6s", "第二階段第 1 堂"], tags: [] },
+  { num: 26, date: "2026-05-07", volume: 1271, phase: 2, exercises: [
+    { name: "額狀面下拉", detail: "11kg × 15×3" },
+    { name: "農夫走路", detail: "16kg × 2 趟", note: "第二趟握力不足" },
+    { name: "直槓三頭下壓", detail: "18kg×12 + 14kg×20×2" },
+  ], notes: ["農夫走路加入課表"], tags: ["new_exercise"] },
+  { num: 27, date: "2026-05-11", volume: 293, phase: 2, exercises: [
+    { name: "平板側抬腿", detail: "—×30×3" },
+    { name: "啞鈴肩推", detail: "4kg×15×3" },
+    { name: "半機械俯身划船", detail: "2.5kg×15×3 遞減" },
+    { name: "ABX", detail: "—×15×3", note: "第一次完成動作" },
+  ], notes: ["ABX 第一次獨立完成"], tags: ["milestone"] },
+  { num: 28, date: "2026-05-14", volume: 1450, phase: 2, exercises: [
+    { name: "機械引體向上", detail: "輔助61kg × 15×12", note: "輔助大於體重,volume 計 0" },
+    { name: "過頭伸三頭", detail: "9kg×15×10 + 5kg×20" },
+    { name: "硬舉學習", detail: "動作建立階段", note: "為里程碑暖身" },
+  ], notes: ["硬舉學習啟動"], tags: ["new_exercise"] },
+  { num: 29, date: "2026-05-18", volume: 1290, phase: 2, exercises: [
+    { name: "機械引體向上", detail: "54kg×7 + 61kg × 11/11/10 遞減", note: "輔助大於體重,volume 計 0" },
+    { name: "直槓二頭彎舉", detail: "9kg×20×2 + 14kg×15 遞減" },
+    { name: "壺鈴硬舉", detail: "16kg×15×3", note: "硬舉首次入課表" },
+    { name: "棒式", detail: "75秒 (15s×3 連續)" },
+  ], notes: ["壺鈴硬舉首次入課表", "Phase II 目標達成中"], tags: ["milestone"] },
+  { num: 30, date: "2026-05-21", volume: 2040, phase: 2, exercises: [
+    { name: "機械平胸推", detail: "9kg×15×4", note: "重量進步" },
+    { name: "六角槓深蹲", detail: "25kg×15×4", note: "膝蓋內扣 — 教練判定第一次嘗試不及格;教練註:此為硬舉前置練習" },
+    { name: "側棒式", detail: "1min × 2", note: "加強練習" },
+  ], notes: ["胸推重量進步", "六角槓深蹲膝蓋內扣", "下堂課加強內收、單腳蹲"], tags: ["progress", "regression"] },
+  { num: 31, date: "2026-05-26", volume: 120, phase: 2, exercises: [
+    { name: "史密斯伏地挺身", detail: "7格 × 14/10/6 遞減" },
+    { name: "單邊啞鈴前平舉", detail: "1kg×20×3" },
+    { name: "棒式轉體", detail: "× 6/4/2/2/4", note: "側棒式之穩定度要加強" },
+    { name: "懸吊握力", detail: "26s / 23s / 14s", note: "握力進步" },
+  ], notes: ["側棒式穩定度要加強", "懸吊握力進步:26s/23s/14s"], tags: ["progress"] },
+  { num: 32, date: "2026-05-28", volume: 1410, phase: 2, exercises: [
+    { name: "單邊水平划船(延伸)", detail: "18kg×15×4" },
+    { name: "半機械二頭彎舉", detail: "2.5kg × 20/16/6 遞減", note: "二頭肌耐力要加強" },
+    { name: "單腳腿後勾", detail: "5kg×15×3" },
+  ], notes: ["二頭肌耐力要加強"], tags: ["regression"] },
+  { num: 33, date: "2026-06-01", volume: 2933, phase: 2, exercises: [
+    { name: "半機械平胸", detail: "2.5kg × 15/13/11 遞減", note: "回家多練習肩胛骨收縮" },
+    { name: "滑輪下拉", detail: "23kg×15×3" },
+    { name: "六角槓深蹲", detail: "30kg×15×4", note: "膝蓋微內扣 — 從第一次 25kg 內扣改善至微內扣,且重量 +5kg" },
+    { name: "平板摸腹", detail: "× 15/12/10 遞減" },
+  ], notes: ["六角槓深蹲 25kg → 30kg(+5kg)且膝蓋內扣改善", "肩胛骨收縮要加強", "膝蓋微內扣"], tags: ["progress", "regression"] },
+  { num: 34, date: "2026-06-04", volume: 1780, phase: 2, exercises: [
+    { name: "跪姿伏地挺身(60cm)", detail: "×15×7", note: "三頭肌要加強" },
+    { name: "直槓三頭下壓", detail: "14kg × 20/13/17" },
+    { name: "壺鈴硬舉", detail: "24kg×15×3", note: "壺鈴重量完成 — 下次進入啞鈴硬舉" },
+  ], notes: ["壺鈴硬舉 16kg → 24kg(+8kg/+50%)壺鈴階段畢業", "下堂課進入啞鈴硬舉", "三頭肌要加強"], tags: ["milestone", "progress", "regression"] },
+  { num: 35, date: "2026-06-09", volume: 3687, phase: 2, exercises: [
+    { name: "機械肩推", detail: "11kg × 15/12 遞減" },
+    { name: "機械深蹲", detail: "32kg×15×3" },
+    { name: "機械捲腹", detail: "39kg × 15/15/20", note: "核心進步" },
+    { name: "划船機(有氧)", detail: "500m / 2:55", note: "穩態有氧配速;volume 不計" },
+  ], notes: ["核心進步", "Phase II 訓練量新高 — 也超越 Phase I 高峰(session 17 的 3216)"], tags: ["progress"] },
+  { num: 36, date: "2026-06-10", volume: 1035, phase: 2, exercises: [
+    { name: "啞鈴上胸推", detail: "4kg(姿勢練習)", note: "第一次做 — 動作學習階段;volume 不計" },
+    { name: "滑輪下拉", detail: "23kg × 17/14/14 遞減" },
+    { name: "划雪機(有氧)", detail: "300m / 1:34 + 300m / 1:43", note: "兩趟 300m;體能進步;volume 不計" },
+  ], notes: ["體能進步(划雪機)", "啞鈴上胸推姿勢學習", "下堂課進入啞鈴硬舉"], tags: ["progress", "new_exercise"] },
+];
+const weekdayZh = ['週一','週二','週三','週四','週五','週六','週日'];
+sessions.forEach(s => {
+  const d = new Date(s.date);
+  s.weekday = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  s.weekdayZh = weekdayZh[s.weekday];
+  s.isMonday = s.weekday === 0;
+  s.isThursday = s.weekday === 3;
+  s.exercises.forEach(e => {
+    e.bodyParts = getBodyParts(e.name);
+  });
+  s.bodyParts = [...new Set(s.exercises.flatMap(e => e.bodyParts))];
+});
+
+// ===== Stats =====
+const totalVol = sessions.reduce((a, s) => a + s.volume, 0);
+const peakSession = sessions.reduce((max, s) => s.volume > max.volume ? s : max, sessions[0]);
+document.getElementById('total-volume').innerHTML = `${(totalVol/1000).toFixed(1)}<span class="unit">T</span>`;
+document.getElementById('peak-volume').innerHTML = `${(peakSession.volume/1000).toFixed(1)}<span class="unit">T</span>`;
+
+const monSessions = sessions.filter(s => s.isMonday);
+const thuSessions = sessions.filter(s => s.isThursday);
+const monAvg = monSessions.reduce((a,s)=>a+s.volume,0) / monSessions.length;
+const thuAvg = thuSessions.reduce((a,s)=>a+s.volume,0) / thuSessions.length;
+document.getElementById('mon-avg').innerHTML = `${Math.round(monAvg).toLocaleString()}<span style="font-size:18px;color:var(--text-mute);font-weight:500;font-family:'Roboto Mono',monospace;"> KG</span>`;
+document.getElementById('thu-avg').innerHTML = `${Math.round(thuAvg).toLocaleString()}<span style="font-size:18px;color:var(--text-mute);font-weight:500;font-family:'Roboto Mono',monospace;"> KG</span>`;
+document.getElementById('mon-meta').textContent = `AVG · ${monSessions.length} SESSIONS`;
+document.getElementById('thu-meta').textContent = `AVG · ${thuSessions.length} SESSIONS`;
+
+// ===== Volume chart =====
+Chart.defaults.font.family = "'Roboto Condensed', 'Noto Sans TC', sans-serif";
+Chart.defaults.color = '#8aa4b3';
+
+const labels = sessions.map(s => `${s.num}`);
+const volumeData = sessions.map(s => s.volume);
+
+const pointBg = sessions.map(s => {
+  if (s.tags.includes('milestone')) return '#00b9e8';
+  if (s.tags.includes('new_exercise')) return '#d65aab';
+  if (s.tags.includes('progress')) return '#ffb547';
+  if (s.tags.includes('regression')) return 'transparent';
+  if (s.isMonday) return '#00b9e8';
+  if (s.isThursday) return '#ff7733';
+  return '#5a7385';
+});
+const pointBorders = sessions.map(s => {
+  if (s.tags.includes('milestone')) return '#00b9e8';
+  if (s.tags.includes('new_exercise')) return '#d65aab';
+  if (s.tags.includes('regression')) return '#ff3d3d';
+  if (s.isMonday) return '#00b9e8';
+  if (s.isThursday) return '#ff7733';
+  return '#5a7385';
+});
+const pointStyles = sessions.map(s => {
+  if (s.tags.includes('milestone')) return 'star';
+  if (s.isThursday) return 'rectRot';
+  return 'circle';
+});
+const pointRadii = sessions.map(s => {
+  if (s.tags.includes('milestone')) return 12;
+  if (['progress','regression','new_exercise'].some(t => s.tags.includes(t))) return 8;
+  return 5;
+});
+
+const coldStartIdx = sessions.findIndex(s => s.num === 17);
+const phaseChangeIdx = sessions.findIndex(s => s.num === 24);
+
+new Chart(document.getElementById('volumeChart').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      data: volumeData,
+      borderColor: '#00b9e8',
+      backgroundColor: ctx => {
+        const chart = ctx.chart;
+        const {chartArea} = chart;
+        if (!chartArea) return 'rgba(0,185,232,0.05)';
+        const g = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, 'rgba(0, 185, 232, 0.25)');
+        g.addColorStop(1, 'rgba(0, 185, 232, 0)');
+        return g;
+      },
+      borderWidth: 2,
+      pointBackgroundColor: pointBg,
+      pointBorderColor: pointBorders,
+      pointStyle: pointStyles,
+      pointBorderWidth: 2,
+      pointRadius: pointRadii,
+      pointHoverRadius: 12,
+      tension: 0.3,
+      fill: true,
+      segment: {
+        borderDash: ctx => {
+          if (ctx.p0DataIndex === coldStartIdx) return [6, 4];
+          if (ctx.p0DataIndex === phaseChangeIdx) return [2, 3];
+          return undefined;
+        },
+        borderColor: ctx => {
+          if (ctx.p0DataIndex === coldStartIdx) return '#5a7385';
+          if (ctx.p0DataIndex === phaseChangeIdx) return '#d65aab';
+          return '#00b9e8';
+        }
+      }
+    }]
+  },
+  plugins: [{
+    id: 'phaseBg',
+    beforeDraw: (chart) => {
+      const {ctx, chartArea, scales} = chart;
+      if (!chartArea) return;
+      const startX = scales.x.getPixelForValue(phaseChangeIdx + 0.5);
+      ctx.save();
+      ctx.fillStyle = 'rgba(214, 90, 171, 0.06)';
+      ctx.fillRect(startX, chartArea.top, chartArea.right - startX, chartArea.bottom - chartArea.top);
+      ctx.fillStyle = '#d65aab';
+      ctx.font = "700 10px 'Roboto Mono', monospace";
+      ctx.textAlign = 'left';
+      ctx.fillText('PHASE II', startX + 8, chartArea.top + 16);
+      ctx.restore();
+    }
+  }],
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0a1419', titleColor: '#00b9e8', bodyColor: '#fff',
+        titleFont: { family: "'Roboto Condensed', sans-serif", size: 14, weight: 800 },
+        bodyFont: { family: "'Roboto Condensed', 'Noto Sans TC', sans-serif", size: 12 },
+        padding: 14, cornerRadius: 0, borderColor: '#00b9e8', borderWidth: 1, displayColors: false,
+        callbacks: {
+          title: (items) => {
+            const s = sessions[items[0].dataIndex];
+            const ph = s.phase === 2 ? ' · PHASE II' : '';
+            return `SESSION ${String(s.num).padStart(2,'0')} · ${s.date.slice(5)} ${s.weekdayZh}${ph}`;
+          },
+          label: (ctx) => {
+            const s = sessions[ctx.dataIndex];
+            const lines = [`▸ VOLUME: ${s.volume.toLocaleString()} kg`];
+            if (s.tags.includes('milestone')) lines.push('🏁 MILESTONE');
+            if (s.tags.includes('new_exercise')) lines.push('✨ NEW EXERCISE');
+            if (s.tags.includes('progress')) lines.push('⭐ PROGRESS');
+            if (s.tags.includes('regression')) lines.push('📌 REGRESSION');
+            if (s.isReturn) lines.push('🌡️ POST-ILLNESS RETURN');
+            lines.push('');
+            s.exercises.forEach(e => lines.push(`· ${e.name}  ${e.detail}`));
+            return lines;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10, weight: 700 }, color: '#5a7385', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 }, border: { color: '#25404f' } },
+      y: { beginAtZero: true, grid: { color: '#15252f' }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10 }, color: '#5a7385', callback: v => v >= 1000 ? (v/1000) + 'k' : v }, border: { display: false } }
+    }
+  }
+});
+
+// ===== Mini charts =====
+const gripData = [
+  { num: 6, s: 5 }, { num: 9, s: 3 }, { num: 12, s: 20 },
+  { num: 14, s: 24 }, { num: 17, s: 18 }, { num: 19, s: 12 },
+  { num: 20, s: 21 }, { num: 21, s: 23 }, { num: 22, s: 20 },
+  { num: 25, s: 12 }, { num: 31, s: 26 },
+];
+
+const plankData = [
+  { num: 4, s: 60, label: "棒式" },
+  { num: 5, s: 60, label: "棒式" },
+  { num: 8, s: 60, label: "棒式" },
+  { num: 13, s: 60, label: "棒式" },
+  { num: 16, s: 60, label: "棒式" },
+  { num: 18, s: 13, label: "側棒式" },
+  { num: 24, s: 35, label: "側棒式進階" },
+  { num: 29, s: 75, label: "棒式 75s (15s×3 連續)" },
+];
+
+new Chart(document.getElementById('gripChart').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: gripData.map(g => g.num),
+    datasets: [{
+      data: gripData.map(g => g.s),
+      backgroundColor: gripData.map(g => g.s >= 18 ? '#00b9e8' : '#ff7733'),
+      borderRadius: 0,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: '#0a1419', titleColor: '#00b9e8', bodyColor: '#fff', cornerRadius: 0, borderColor: '#00b9e8', borderWidth: 1,
+        callbacks: { title: (i) => `SESSION ${gripData[i[0].dataIndex].num}`, label: c => `${c.parsed.y} SEC` } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10, weight: 700 }, color: '#5a7385' }, border: { color: '#25404f' } },
+      y: { beginAtZero: true, grid: { color: '#15252f' }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10 }, color: '#5a7385', callback: v => v + 's' }, border: { display: false } }
+    }
+  }
+});
+
+new Chart(document.getElementById('plankChart').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: plankData.map(p => p.num),
+    datasets: [{
+      data: plankData.map(p => p.s),
+      backgroundColor: plankData.map(p => p.label.includes('側') ? '#ffb547' : '#00b9e8'),
+      borderRadius: 0,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: '#0a1419', titleColor: '#00b9e8', bodyColor: '#fff', cornerRadius: 0, borderColor: '#00b9e8', borderWidth: 1,
+        callbacks: { title: (i) => `SESSION ${plankData[i[0].dataIndex].num}`, label: c => `${plankData[c.dataIndex].label} · ${c.parsed.y}s` } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10, weight: 700 }, color: '#5a7385' }, border: { color: '#25404f' } },
+      y: { beginAtZero: true, grid: { color: '#15252f' }, ticks: { font: { family: "'Roboto Mono', monospace", size: 10 }, color: '#5a7385', callback: v => v + 's' }, border: { display: false } }
+    }
+  }
+});
+
+// ===== EXERCISE EXPLORER LOGIC =====
+function canonicalName(n) {
+  if (/划船機/.test(n)) return '划船機(有氧)';
+  if (/划雪機/.test(n)) return '划雪機(有氧)';
+  if (/六角槓深蹲|硬舉/.test(n)) return '硬舉';
+  if (/滑輪下拉|下拉/.test(n) && !/俯身/.test(n)) return '下拉系列';
+  if (/划船/.test(n)) return '划船系列';
+  if (/胸推|伏地挺身/.test(n)) return '胸推系列';
+  if (/肩推/.test(n)) return '肩推系列';
+  if (/前平舉/.test(n)) return '前平舉';
+  if (/二頭彎舉/.test(n)) return '二頭彎舉';
+  if (/三頭下壓|伸三頭/.test(n)) return '三頭下壓';
+  if (/深蹲/.test(n)) return '深蹲系列';
+  if (/腿後勾/.test(n)) return '腿後勾';
+  if (/側飛鳥|側平舉/.test(n)) return '側飛鳥';
+  if (/ABX/.test(n)) return 'ABX';
+  if (/捲腹/.test(n)) return '機械捲腹';
+  if (/棒式|側棒|轉體/.test(n)) return '棒式';
+  if (/引體向上/.test(n)) return '機械引體向上(輔助)';
+  if (/農夫走路/.test(n)) return '農夫走路';
+  if (/懸吊握力/.test(n)) return '懸吊握力';
+  if (/平板/.test(n)) return '平板核心';
+  if (/弓箭步/.test(n)) return '弓箭步';
+  if (/髖/.test(n)) return '髖部訓練';
+  if (/死蟲/.test(n)) return '死蟲式';
+  if (/腿推機/.test(n)) return '腿推機';
+  return n;
+}
+
+// Detect if exercise is assist-based (lower number = stronger)
+function isAssistExercise(name) {
+  return /引體向上/.test(name);
+}
+
+// Extract a representative weight from detail string
+function extractWeight(detail) {
+  const matches = [...detail.matchAll(/(\d+(?:\.\d+)?)\s*kg/gi)];
+  if (matches.length === 0) return null;
+  return Math.max(...matches.map(m => parseFloat(m[1])));
+}
+
+// Group exercises
+const exerciseGroups = {};
+sessions.forEach(s => {
+  s.exercises.forEach(e => {
+    const cn = canonicalName(e.name);
+    if (!exerciseGroups[cn]) {
+      exerciseGroups[cn] = {
+        name: cn,
+        history: [],
+        bodyParts: new Set(),
+        isAssist: isAssistExercise(e.name),
+        hasPhase2: false,
+      };
+    }
+    exerciseGroups[cn].history.push({
+      num: s.num, date: s.date, weekdayZh: s.weekdayZh,
+      detail: e.detail, note: e.note,
+      originalName: e.name,
+      phase: s.phase,
+      tags: s.tags,
+    });
+    e.bodyParts.forEach(p => exerciseGroups[cn].bodyParts.add(p));
+    if (s.phase === 2) exerciseGroups[cn].hasPhase2 = true;
+  });
+});
+
+// Sort: phase 2 new first, then by most recent session
+const exerciseList = Object.values(exerciseGroups).map(g => {
+  // Latest session for this exercise
+  const latest = g.history.reduce((max, h) => h.num > max.num ? h : max, g.history[0]);
+  const latestWeight = extractWeight(latest.detail);
+  const firstWeight = extractWeight(g.history[0].detail);
+  return {
+    ...g,
+    latestSession: latest.num,
+    latestDate: latest.date,
+    latestDetail: latest.detail,
+    latestNote: latest.note,
+    latestWeight,
+    firstWeight,
+    bodyParts: [...g.bodyParts],
+  };
+}).sort((a, b) => b.latestSession - a.latestSession);
+
+// === FILTER BAR ===
+const filterContainer = document.getElementById('filter-chips');
+const partCounts = {};
+Object.keys(BODY_PARTS).forEach(p => {
+  partCounts[p] = exerciseList.filter(ex => ex.bodyParts.includes(p)).length;
+});
+
+// "All" chip
+const allChip = document.createElement('div');
+allChip.className = 'chip active';
+allChip.dataset.part = 'all';
+allChip.innerHTML = `全部 <span class="count">${exerciseList.length}</span>`;
+filterContainer.appendChild(allChip);
+
+Object.entries(BODY_PARTS).forEach(([key, info]) => {
+  if (partCounts[key] === 0) return;
+  const c = document.createElement('div');
+  c.className = 'chip';
+  c.dataset.part = key;
+  c.innerHTML = `<span class="body-dot bd-${key}"></span><span>${info.label}</span><span class="count">${partCounts[key]}</span>`;
+  filterContainer.appendChild(c);
+});
+
+// === EXERCISE CARDS RENDER ===
+function buildSparkline(history, isAssist) {
+  // Get weights, fall back to session count
+  const points = history.map(h => ({
+    num: h.num,
+    weight: extractWeight(h.detail),
+  })).filter(p => p.weight !== null);
+
+  if (points.length < 2) return null;
+
+  const weights = points.map(p => p.weight);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min || 1;
+
+  const W = 160, H = 36, PAD = 4;
+  const xStep = (W - PAD * 2) / (points.length - 1);
+  const coords = points.map((p, i) => {
+    const x = PAD + i * xStep;
+    const y = H - PAD - ((p.weight - min) / range) * (H - PAD * 2);
+    return [x, y];
+  });
+
+  // Path
+  const path = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c[0].toFixed(1)} ${c[1].toFixed(1)}`).join(' ');
+  // Fill area
+  const fill = `${path} L ${coords[coords.length-1][0].toFixed(1)} ${H-PAD} L ${coords[0][0].toFixed(1)} ${H-PAD} Z`;
+
+  // Calc delta
+  const first = points[0].weight;
+  const last = points[points.length - 1].weight;
+  const delta = last - first;
+  // For assist exercises, decrease = improvement
+  const isImprovement = isAssist ? delta < 0 : delta > 0;
+  const deltaStr = (delta > 0 ? '+' : '') + delta.toFixed(delta % 1 === 0 ? 0 : 1) + 'kg';
+  let deltaClass = 'flat';
+  let arrow = '→';
+  if (Math.abs(delta) < 0.1) {
+    deltaClass = 'flat';
+    arrow = '→';
+  } else if (isImprovement) {
+    deltaClass = 'up';
+    arrow = isAssist ? '↘' : '↗';
+  } else {
+    deltaClass = 'down';
+    arrow = isAssist ? '↗' : '↘';
+  }
+
+  // Color: improvement = cyan, regression = red/orange
+  const lineColor = isImprovement ? '#00b9e8' : (Math.abs(delta) < 0.1 ? '#8aa4b3' : '#ff7733');
+  const fillColor = isImprovement ? 'rgba(0,185,232,0.15)' : (Math.abs(delta) < 0.1 ? 'rgba(138,164,179,0.1)' : 'rgba(255,119,51,0.15)');
+
+  // Points
+  const pointDots = coords.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="1.8" fill="${lineColor}"/>`).join('');
+  const lastDot = `<circle cx="${coords[coords.length-1][0].toFixed(1)}" cy="${coords[coords.length-1][1].toFixed(1)}" r="3" fill="${lineColor}" stroke="${'#0a1419'}" stroke-width="1.5"/>`;
+
+  return {
+    svg: `<svg class="spark-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <path d="${fill}" fill="${fillColor}"/>
+      <path d="${path}" stroke="${lineColor}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pointDots}
+      ${lastDot}
+    </svg>`,
+    delta: deltaStr,
+    deltaClass,
+    arrow,
+    isAssist,
+  };
+}
+
+function renderExerciseCards() {
+  const container = document.getElementById('exercise-cards');
+  container.innerHTML = '';
+
+  exerciseList.forEach((ex, idx) => {
+    const card = document.createElement('div');
+    let extraClass = '';
+    if (ex.name === '硬舉') extraClass = 'milestone';
+    else if (ex.hasPhase2 && (ex.name === '農夫走路' || ex.name === '硬舉')) extraClass = 'new-ex';
+    card.className = `ex-card ${extraClass}`;
+    card.dataset.parts = ex.bodyParts.join(',');
+    card.dataset.name = ex.name;
+    card.dataset.searchText = ex.name + ' ' + ex.history.map(h => h.originalName).join(' ');
+
+    // Build part tags
+    const partTagsHtml = ex.bodyParts.map(p =>
+      `<span class="ex-tag part-${p}">${BODY_PARTS[p].label}</span>`
+    ).join('');
+
+    // Extra tags
+    const extraTags = [];
+    if (ex.isAssist) extraTags.push('<span class="ex-tag assist">輔助動作</span>');
+    if (ex.name === '硬舉' || ex.name === '農夫走路') extraTags.push('<span class="ex-tag phase2">✨ PHASE II 新動作</span>');
+
+    // Sparkline
+    const spark = buildSparkline(ex.history, ex.isAssist);
+
+    let sparkHtml;
+    if (!spark) {
+      sparkHtml = `<div class="spark-row"><div class="spark-label">趨勢</div><div class="spark-only-one">只有 ${ex.history.length} 次紀錄</div></div>`;
+    } else {
+      sparkHtml = `<div class="spark-row">
+        <div class="spark-label">趨勢</div>
+        ${spark.svg}
+        <div class="spark-delta ${spark.deltaClass}">${spark.arrow} ${spark.isAssist ? '輔助 ' : ''}${spark.delta}</div>
+      </div>`;
+    }
+
+    // Latest weight display
+    let latestDisplay;
+    if (ex.latestWeight !== null) {
+      latestDisplay = `<div class="ex-card-latest-value">${ex.latestWeight}<span class="u">kg</span></div>`;
+    } else {
+      latestDisplay = `<div class="ex-card-latest-value" style="color:var(--text-mute);">—</div>`;
+    }
+
+    // History rows
+    const sortedHistory = [...ex.history].sort((a, b) => a.num - b.num);
+    const historyHtml = sortedHistory.map(h => {
+      const w = extractWeight(h.detail);
+      return `<div class="history-row">
+        <div class="session-n">${String(h.num).padStart(2,'0')}</div>
+        <div class="date">${h.date.slice(5).replace('-','.')}</div>
+        <div class="ex-actual" title="${h.originalName}">${h.originalName}</div>
+        <div class="detail">${h.detail}${h.note ? `<span class="note">${h.note}</span>` : ''}</div>
+        <div class="max-w">${w !== null ? w : '—'}</div>
+      </div>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="ex-card-head">
+        <div class="ex-card-left">
+          <div class="ex-card-title-row">
+            <span class="ex-card-name">${ex.name}</span>
+            ${partTagsHtml}
+            ${extraTags.join('')}
+          </div>
+          <div class="ex-card-meta">
+            共 <span class="strong">${ex.history.length}</span> 次 · 最近 <span class="strong">第 ${ex.latestSession} 堂</span>
+          </div>
+        </div>
+        <div class="ex-card-right">
+          <div class="ex-card-latest-label">${ex.isAssist ? '最新輔助' : '最新'}</div>
+          ${latestDisplay}
+          <div class="ex-card-latest-date">${ex.latestDate.slice(5).replace('-','/')}</div>
+          ${ex.isAssist ? '<div class="ex-card-latest-note">(輔助越少越強)</div>' : ''}
+        </div>
+      </div>
+      ${sparkHtml}
+      <button class="expand-btn" data-target="hist-${idx}">
+        <span class="arrow">▶</span>
+        <span>看歷史紀錄 (${ex.history.length})</span>
+      </button>
+      <div class="history-table" id="hist-${idx}">
+        <div class="history-row header">
+          <div>SESSION</div>
+          <div>DATE</div>
+          <div>動作 EXERCISE</div>
+          <div>DETAIL</div>
+          <div style="text-align:right">MAX KG</div>
+        </div>
+        ${historyHtml}
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Bind expand buttons
+  container.querySelectorAll('.expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      target.classList.toggle('show');
+      btn.classList.toggle('open');
+    });
+  });
+
+  applyFilters();
+}
+
+// === FILTER + SEARCH ===
+let activeFilter = 'all';
+let activeSearch = '';
+
+function applyFilters() {
+  const cards = document.querySelectorAll('.ex-card');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const parts = (card.dataset.parts || '').split(',');
+    const searchText = (card.dataset.searchText || '').toLowerCase();
+
+    const partMatch = activeFilter === 'all' || parts.includes(activeFilter);
+    const searchMatch = !activeSearch || searchText.includes(activeSearch.toLowerCase());
+
+    const show = partMatch && searchMatch;
+    card.classList.toggle('hidden', !show);
+    if (show) visibleCount++;
+  });
+
+  document.getElementById('result-num').textContent = visibleCount;
+  document.getElementById('total-num').textContent = exerciseList.length;
+  document.getElementById('no-results').style.display = visibleCount === 0 ? 'block' : 'none';
+
+  // Update filter status text
+  const filterStatusEl = document.getElementById('filter-status');
+  const parts = [];
+  if (activeFilter !== 'all') parts.push(BODY_PARTS[activeFilter].label);
+  if (activeSearch) parts.push(`「${activeSearch}」`);
+  filterStatusEl.textContent = parts.length === 0 ? '全部' : parts.join(' + ');
+
+  // === Sync filter to Session Log ===
+  const logRows = document.querySelectorAll('.log-row');
+  let logVisibleCount = 0;
+  const visibleSessionNums = new Set();
+  logRows.forEach(row => {
+    const rowParts = (row.dataset.parts || '').split(',');
+    const rowSearchText = (row.dataset.searchText || '').toLowerCase();
+    const partMatch = activeFilter === 'all' || rowParts.includes(activeFilter);
+    const searchMatch = !activeSearch || rowSearchText.includes(activeSearch.toLowerCase());
+    const show = partMatch && searchMatch;
+    row.style.display = show ? '' : 'none';
+    if (show) { logVisibleCount++; visibleSessionNums.add(parseInt(row.dataset.sessionNum)); }
+  });
+  document.querySelectorAll('.log-divider').forEach(div => {
+    const afterNum = parseInt(div.dataset.dividerAfter || '0');
+    const hasFollowing = [...visibleSessionNums].some(n => n > afterNum);
+    div.style.display = hasFollowing ? '' : 'none';
+  });
+  const logTagEl = document.getElementById('log-section-tag');
+  if (logTagEl) {
+    const total = sessions.length;
+    if (logVisibleCount === total) {
+      logTagEl.textContent = `${total} ENTRIES`;
+    } else {
+      const fd = activeFilter !== 'all' ? BODY_PARTS[activeFilter].label : (activeSearch ? `「${activeSearch}」` : '');
+      logTagEl.textContent = `SHOWING ${logVisibleCount} / ${total}${fd ? ' · ' + fd : ''}`;
+    }
+  }
+  const logNoResults = document.getElementById('log-no-results');
+  if (logNoResults) logNoResults.style.display = logVisibleCount === 0 ? 'block' : 'none';
+}
+
+// Bind chip clicks
+document.querySelectorAll('#filter-chips .chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('#filter-chips .chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activeFilter = c.dataset.part;
+    applyFilters();
+  });
+});
+
+// Bind search input
+document.getElementById('search-input').addEventListener('input', (e) => {
+  activeSearch = e.target.value.trim();
+  applyFilters();
+});
+
+renderExerciseCards();
+
+// ===== SESSION LOG (still kept) =====
+const log = document.getElementById('log-list');
+sessions.forEach((s, i) => {
+  if (s.num === 18) {
+    const d = document.createElement('div');
+    d.className = 'log-divider cold';
+    d.dataset.dividerAfter = '17';
+    d.innerHTML = '⌇⌇⌇ COLD BREAK · ~1 MONTH OFF ⌇⌇⌇';
+    log.appendChild(d);
+  }
+  if (s.num === 25) {
+    const d = document.createElement('div');
+    d.className = 'log-divider phase';
+    d.dataset.dividerAfter = '24';
+    d.innerHTML = '◆◆◆ PHASE II · UNLOCK DEADLIFT ◆◆◆';
+    log.appendChild(d);
+  }
+
+  const row = document.createElement('div');
+  const tagClass =
+    s.tags.includes('milestone') ? 'milestone' :
+    s.tags.includes('new_exercise') ? 'new_exercise' :
+    s.tags.includes('progress') ? 'progress' :
+    s.tags.includes('regression') ? 'regression' : '';
+  row.className = `log-row ${tagClass}`;
+  row.dataset.parts = s.bodyParts.join(',');
+  row.dataset.searchText = s.exercises.map(e => e.name).join(' ').toLowerCase();
+  row.dataset.sessionNum = s.num;
+
+  const exHtml = s.exercises.map(e => `
+    <div class="ex-line">
+      <span class="ex-name">${e.name}</span>
+      <span class="ex-detail">${e.detail}</span>
+      ${e.note ? `<span class="ex-note-inline">${e.note}</span>` : ''}
+    </div>
+  `).join('');
+
+  const tagsHtml = [
+    ...s.tags.map(t => {
+      const labels = { progress: '⭐ PROGRESS', regression: '📌 REGRESSION', milestone: '🏁 MILESTONE', new_exercise: '✨ NEW EXERCISE' };
+      return labels[t] ? `<span class="t ${t}">${labels[t]}</span>` : '';
+    }),
+    ...s.notes.map(n => `<span class="t note">${n}</span>`),
+    ...(s.isReturn ? ['<span class="t note">🌡️ POST-ILLNESS</span>'] : [])
+  ].filter(x=>x).join('');
+
+  row.innerHTML = `
+    <div class="log-num">${String(s.num).padStart(2,'0')}<span class="label">SESSION</span></div>
+    <div class="log-date">${s.date.replace(/-/g, '.')}<span class="day">${s.weekdayZh.toUpperCase()}</span></div>
+    <div class="log-content">
+      <div class="log-exercises">${exHtml}</div>
+      <div class="tag-row">${tagsHtml}</div>
+    </div>
+    <div class="log-volume">
+      <div class="label">VOLUME</div>
+      <div class="value">${s.volume.toLocaleString()}<span class="u">kg</span></div>
+    </div>
+  `;
+  log.appendChild(row);
+});
+</script>
+</body>
+</html>
