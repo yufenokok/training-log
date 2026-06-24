@@ -14,7 +14,7 @@
   4. Update the KPI cards in HTML (search: "kpi-row")
   5. Update body composition rings if new InBody data exists
   6. Update the Hero strip tagline if narrative changed
-  7. Update the "36 SESSIONS" pill counts and section labels
+  7. Update the "39 SESSIONS" pill counts and section labels
 
   KEY DESIGN INVARIANTS (do NOT change without explicit user request):
   - Garmin cyan-on-navy palette (--cyan: #00b9e8, --bg: #0a1419)
@@ -1307,7 +1307,7 @@ body {
     </div>
     <div class="status-pills">
       <div class="pill live">RECORDING</div>
-      <div class="pill">36 SESSIONS</div>
+      <div class="pill">39 SESSIONS</div>
       <div class="pill">PHASE 2/3</div>
     </div>
   </div>
@@ -1316,10 +1316,10 @@ body {
   <div class="hero-strip">
     <div class="hero-top">
       <div class="hero-title">FROM <span class="accent">ZERO</span> TO <span class="accent">DEADLIFT</span></div>
-      <div class="hero-meta">SESSION 02 → 36 · 2026.01 — ONGOING</div>
+      <div class="hero-meta">SESSION 02 → 39 · 2026.01 — ONGOING</div>
     </div>
     <div class="hero-tagline">
-      一月起步,三月感冒中斷,四月歸位完成 24 堂,五月把壺鈴硬舉 16kg 寫進課表,六月推到 24kg 完成壺鈴階段,下次進入啞鈴硬舉。Phase II 進行式。
+      一月起步,三月感冒中斷,四月歸位完成 24 堂,五月把壺鈴硬舉寫進課表,六月從 16kg 推到 24kg 畢業,進入啞鈴硬舉 — 從器械走向自由重量。Phase II 進行式。
     </div>
   </div>
 
@@ -1327,11 +1327,11 @@ body {
   <div class="kpi-row">
     <div class="kpi-card highlight">
       <div class="kpi-head">
-        <div class="kpi-label">KETTLEBELL DL</div>
-        <div class="kpi-trend up">▲ NEW PR</div>
+        <div class="kpi-label">DEADLIFT 硬舉</div>
+        <div class="kpi-trend up">▲ 自由重量</div>
       </div>
-      <div class="kpi-value">24<span class="unit">KG × 15 × 3</span></div>
-      <div class="kpi-foot">06.04 · SESSION 34 · 壺鈴階段畢業</div>
+      <div class="kpi-value">14<span class="unit">KG 啞鈴 · 進行中</span></div>
+      <div class="kpi-foot">壺鈴 16→24kg 畢業 · 啞鈴階段開始</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-head">
@@ -1347,7 +1347,7 @@ body {
         <div class="kpi-trend up">▲ CUMULATIVE</div>
       </div>
       <div class="kpi-value" id="total-volume">—</div>
-      <div class="kpi-foot">累積總訓練量 · 36 SESSIONS</div>
+      <div class="kpi-foot">累積總訓練量 · 39 SESSIONS</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-head">
@@ -1561,7 +1561,7 @@ body {
   <section class="section">
     <div class="section-head">
       <div class="section-title"><span class="num">06</span>SESSION LOG / 每堂明細</div>
-      <div class="section-tag" id="log-section-tag">36 ENTRIES</div>
+      <div class="section-tag" id="log-section-tag">39 ENTRIES</div>
     </div>
     <div class="log-list" id="log-list"></div>
     <div class="no-results" id="log-no-results" style="display:none;margin-top:0;">沒有符合條件的訓練紀錄</div>
@@ -1570,9 +1570,9 @@ body {
   <!-- Footer -->
   <div class="footer">
     <div class="quote">
-      「壺鈴硬舉 <span class="hl">16KG → 24KG</span>,壺鈴階段畢業。<br>
-      下一堂進入啞鈴硬舉,<br>
-      <span class="hl">Phase II 的故事正在被寫下。</span>」
+      「壺鈴硬舉 <span class="hl">16KG → 24KG</span> 畢業,<br>
+      接著啞鈴硬舉,下一站槓鈴 —<br>
+      <span class="hl">從器械到自由重量,一步步走向 Deadlift。</span>」
     </div>
     <div class="sig">PHASE I · COMPLETE  ·  PHASE II · IN PROGRESS  ·  PHASE III · UNLOCK</div>
   </div>
@@ -1774,6 +1774,23 @@ const sessions = [
     { name: "滑輪下拉", detail: "23kg × 17/14/14 遞減" },
     { name: "划雪機(有氧)", detail: "300m / 1:34 + 300m / 1:43", note: "兩趟 300m;體能進步;volume 不計" },
   ], notes: ["體能進步(划雪機)", "啞鈴上胸推姿勢學習", "下堂課進入啞鈴硬舉"], tags: ["progress", "new_exercise"] },
+  { num: 37, date: "2026-06-15", volume: 733, phase: 2, exercises: [
+    { name: "啞鈴上胸推", detail: "6kg×15×3", note: "重量進步 4→6kg" },
+    { name: "啞鈴硬舉", detail: "12.5kg × 15/12/10 遞減", note: "啞鈴硬舉首次 — 硬舉從器械過渡到自由重量;後面握力不足" },
+    { name: "划雪機(有氧)", detail: "350m / 2:10", note: "volume 不計" },
+  ], notes: ["啞鈴硬舉首次入課表 — 壺鈴→啞鈴→槓鈴的過渡", "啞鈴上胸推 4→6kg", "後面握力不足", "膝蓋內扣"], tags: ["milestone", "progress", "regression"] },
+  { num: 38, date: "2026-06-18", volume: 1278, phase: 2, exercises: [
+    { name: "啞鈴肩推", detail: "5kg×15×3" },
+    { name: "窄握滑輪下拉", detail: "23kg × 14/11/11 遞減" },
+    { name: "弓箭步(臀)", detail: "5kg×15×3" },
+    { name: "懸吊握力", detail: "17s", note: "volume 不計" },
+  ], notes: [], tags: [] },
+  { num: 39, date: "2026-06-23", volume: 378, phase: 2, exercises: [
+    { name: "機械引體向上", detail: "輔助54kg × 8/8/6 遞減", note: "輔助大於體重" },
+    { name: "啞鈴硬舉", detail: "14kg × 10/10/7 遞減", note: "握力不足" },
+    { name: "板凳伏地挺身(膝蓋90度)", detail: "× 15/15/10", note: "體重動作" },
+    { name: "棒式轉體", detail: "10趟 + 15趟" },
+  ], notes: ["完成度高、動作畢業", "啞鈴硬舉 12.5→14kg", "握力不足"], tags: ["progress", "regression"] },
 ];
 const weekdayZh = ['週一','週二','週三','週四','週五','週六','週日'];
 sessions.forEach(s => {
@@ -1940,7 +1957,7 @@ const gripData = [
   { num: 6, s: 5 }, { num: 9, s: 3 }, { num: 12, s: 20 },
   { num: 14, s: 24 }, { num: 17, s: 18 }, { num: 19, s: 12 },
   { num: 20, s: 21 }, { num: 21, s: 23 }, { num: 22, s: 20 },
-  { num: 25, s: 12 }, { num: 31, s: 26 },
+  { num: 25, s: 12 }, { num: 31, s: 26 }, { num: 38, s: 17 },
 ];
 
 const plankData = [
