@@ -1466,21 +1466,49 @@ body {
   <!-- Main volume chart -->
   <section class="section">
     <div class="section-head">
-      <div class="section-title"><span class="num">02</span>VOLUME CURVE / 訓練量軌跡</div>
-      <div class="section-tag">FIG.02 · KG × REPS</div>
+      <div class="section-title"><span class="num">02</span>VOLUME / 訓練量趨勢</div>
+      <div class="section-tag">FIG.02 · 總負荷 KG</div>
     </div>
     <div class="chart-card">
+      <p style="font-family:'Noto Sans TC',sans-serif;font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">
+        每堂的總訓練量(重量×次數加總)。單堂高低主要看當天練哪些部位 — <span style="color:var(--cyan);">藍線</span>會跳動是正常的。看進步要看 <span style="color:var(--yellow);">黃色虛線(4 堂移動平均)</span>:它壓掉部位造成的起伏,呈現整體訓練負荷的長期走向。「我變強了嗎」請看下方的力量進展圖。
+      </p>
       <div class="chart-container">
         <canvas id="volumeChart"></canvas>
       </div>
       <div class="legend-row">
-        <div class="l-item"><span class="l-dot" style="background:#00b9e8"></span>週一</div>
-        <div class="l-item"><span class="l-dot" style="background:#ff7733;border-radius:0;transform:rotate(45deg);width:9px;height:9px;"></span>週四</div>
+        <div class="l-item"><span class="l-dot" style="background:#00b9e8"></span>單堂訓練量</div>
+        <div class="l-item"><span class="l-dot" style="background:#ffb547;width:14px;height:0;border-top:2.5px dashed #ffb547;"></span>4堂移動平均</div>
         <div class="l-item"><span class="l-dot" style="background:#00b9e8;clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);width:13px;height:13px;border-radius:0;"></span>里程碑</div>
         <div class="l-item"><span class="l-dot" style="background:#ffb547"></span>進步</div>
         <div class="l-item"><span class="l-dot" style="background:transparent;border:2px solid #ff3d3d"></span>退步</div>
         <div class="l-item"><span class="l-dot" style="background:#d65aab"></span>新動作</div>
       </div>
+    </div>
+  </section>
+
+  <!-- Strength progression charts (split: lower / upper body) -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="num">02.5</span>STRENGTH / 力量進展</div>
+      <div class="section-tag">FIG.02b · 分器材 · 最重組</div>
+    </div>
+    <div class="chart-card" style="margin-bottom:16px;">
+      <p style="font-family:'Noto Sans TC',sans-serif;font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">
+        主要動作的重量進展,<strong style="color:var(--text);">依器材分段</strong>。教練用「換更難的器材」當漸進手段(機械→自由重量),所以換器材時重量會「重設」— 這不是退步,是升級。每一段同器材內的上升,才是真正的力量進步(例如機械深蹲 14→23→32kg)。點圖例可開關各條線;部分次要線預設隱藏。
+      </p>
+      <div style="font-family:'Roboto Condensed','Noto Sans TC',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.1em;color:var(--text);text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed var(--line-bright);">下半身 · LOWER(深蹲 / 硬舉)</div>
+      <div class="chart-container" style="height:320px;">
+        <canvas id="strengthChartLower"></canvas>
+      </div>
+      <div id="strength-legend-lower" class="legend-row"></div>
+    </div>
+    <div class="chart-card">
+      <div style="font-family:'Roboto Condensed','Noto Sans TC',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.1em;color:var(--text);text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed var(--line-bright);">上半身 · UPPER(下拉 / 胸推 / 肩推 / 划船)</div>
+      <div class="chart-container" style="height:320px;">
+        <canvas id="strengthChartUpper"></canvas>
+      </div>
+      <div id="strength-legend-upper" class="legend-row"></div>
     </div>
   </section>
 
@@ -1827,6 +1855,13 @@ Chart.defaults.color = '#8aa4b3';
 const labels = sessions.map(s => `${s.num}`);
 const volumeData = sessions.map(s => s.volume);
 
+// 4-session moving average (壓掉單堂部位造成的跳動,看整體訓練負荷趨勢)
+const movingAvg = volumeData.map((_, i) => {
+  const start = Math.max(0, i - 3);
+  const window = volumeData.slice(start, i + 1);
+  return Math.round(window.reduce((a, b) => a + b, 0) / window.length);
+});
+
 const pointBg = sessions.map(s => {
   if (s.tags.includes('milestone')) return '#00b9e8';
   if (s.tags.includes('new_exercise')) return '#d65aab';
@@ -1895,6 +1930,17 @@ new Chart(document.getElementById('volumeChart').getContext('2d'), {
           return '#00b9e8';
         }
       }
+    }, {
+      label: '4堂移動平均',
+      data: movingAvg,
+      borderColor: '#ffb547',
+      borderWidth: 2.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      tension: 0.4,
+      fill: false,
+      order: -1
     }]
   },
   plugins: [{
@@ -2018,6 +2064,162 @@ new Chart(document.getElementById('plankChart').getContext('2d'), {
     }
   }
 });
+
+// ===== STRENGTH PROGRESSION CHART (分器材) =====
+function detectImplement(name) {
+  // returns [group, implement] or [null, null]
+  if (/六角槓深蹲/.test(name)) return ['硬舉', '六角槓'];
+  if (/壺鈴硬舉/.test(name)) return ['硬舉', '壺鈴'];
+  if (/啞鈴硬舉/.test(name)) return ['硬舉', '啞鈴'];
+  if (/高腳杯深蹲/.test(name)) return ['深蹲', '高腳杯'];
+  if (/壺鈴深蹲/.test(name)) return ['深蹲', '壺鈴'];
+  if (/機械深蹲/.test(name)) return ['深蹲', '機械'];
+  if (/對握/.test(name) && /下拉/.test(name)) return ['下拉', '對握'];
+  if (/窄握/.test(name) && /下拉/.test(name)) return ['下拉', '窄握'];
+  if (/額狀面/.test(name)) return ['下拉', '額狀面'];
+  if (/矢狀面/.test(name)) return ['下拉', '矢狀面'];
+  if (/滑輪下拉/.test(name) || (/下拉/.test(name) && !/俯身/.test(name))) return ['下拉', '滑輪'];
+  if (/啞鈴.*胸|啞鈴上胸/.test(name)) return ['胸推', '啞鈴'];
+  if (/半機械.*胸|半機械平胸|半機械上胸/.test(name)) return ['胸推', '半機械'];
+  if (/機械.*胸推|機械平胸|機械胸推/.test(name)) return ['胸推', '機械'];
+  if (/機械肩推/.test(name)) return ['肩推', '機械'];
+  if (/啞鈴肩推/.test(name)) return ['肩推', '啞鈴'];
+  if (/水平划船|單邊水平划船/.test(name)) return ['划船', '水平'];
+  return [null, null];
+}
+function maxWeightFromDetail(detail) {
+  const m = [...detail.matchAll(/(\d+(?:\.\d+)?)\s*kg/gi)];
+  return m.length ? Math.max(...m.map(x => parseFloat(x[1]))) : null;
+}
+// Build segments: one line per (group + implement)
+const strengthSegments = {};
+sessions.forEach(s => {
+  s.exercises.forEach(e => {
+    const [group, imp] = detectImplement(e.name);
+    if (!group) return;
+    const w = maxWeightFromDetail(e.detail);
+    if (w === null) return;
+    const key = `${group} · ${imp}`;
+    if (!strengthSegments[key]) strengthSegments[key] = { group, imp, points: [] };
+    strengthSegments[key].points.push({ x: s.num, y: w });
+  });
+});
+// Distinct color per line (so same body-part different implements are still distinguishable)
+const lineStyles = {
+  // Lower body
+  '深蹲 · 機械':   { color: '#ffb547', primary: true },
+  '深蹲 · 高腳杯': { color: '#c98a1a', primary: false },
+  '深蹲 · 壺鈴':   { color: '#ffd98a', primary: false },
+  '硬舉 · 啞鈴':   { color: '#00b9e8', primary: true },
+  '硬舉 · 壺鈴':   { color: '#0a7fa0', primary: true },
+  '硬舉 · 六角槓': { color: '#7fe0ff', primary: true },
+  // Upper body
+  '下拉 · 滑輪':   { color: '#6ec56e', primary: true },
+  '下拉 · 對握':   { color: '#3a8a3a', primary: false },
+  '下拉 · 額狀面': { color: '#aee0ae', primary: false },
+  '胸推 · 機械':   { color: '#ff7733', primary: true },
+  '胸推 · 啞鈴':   { color: '#c14d18', primary: false },
+  '肩推 · 機械':   { color: '#d65aab', primary: true },
+  '肩推 · 啞鈴':   { color: '#8a3a6e', primary: false },
+  '划船 · 水平':   { color: '#00d4ff', primary: true },
+};
+
+const LOWER_GROUPS = ['深蹲', '硬舉'];
+const UPPER_GROUPS = ['下拉', '胸推', '肩推', '划船'];
+const NOISE_IMPLEMENTS = ['半機械', '矢狀面', '窄握'];
+
+function buildDatasets(groupFilter) {
+  return Object.entries(strengthSegments)
+    .filter(([k, seg]) => seg.points.length >= 2
+      && !NOISE_IMPLEMENTS.includes(seg.imp)
+      && groupFilter.includes(seg.group))
+    .map(([key, seg]) => {
+      const style = lineStyles[key] || { color: '#8aa4b3', primary: false };
+      return {
+        label: key,
+        data: seg.points.sort((a, b) => a.x - b.x),
+        borderColor: style.color,
+        backgroundColor: style.color,
+        borderWidth: style.primary ? 3 : 2,
+        pointRadius: style.primary ? 5 : 3,
+        pointHoverRadius: 8,
+        tension: 0.1,
+        spanGaps: false,
+        showLine: true,
+        hidden: !style.primary  // 次要線預設隱藏
+      };
+    });
+}
+
+const lowerDatasets = buildDatasets(LOWER_GROUPS);
+const upperDatasets = buildDatasets(UPPER_GROUPS);
+
+function strengthChartOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'nearest' },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0a1419', titleColor: '#00b9e8', bodyColor: '#fff',
+        cornerRadius: 0, borderColor: '#00b9e8', borderWidth: 1, padding: 12,
+        callbacks: {
+          title: (items) => `SESSION ${items[0].raw.x}`,
+          label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.y} kg`
+        }
+      }
+    },
+    scales: {
+      x: {
+        type: 'linear',
+        title: { display: true, text: 'SESSION', font: { family: "'Roboto Mono', monospace", size: 10, weight: 700 }, color: '#5a7385' },
+        grid: { color: '#15252f' },
+        ticks: { font: { family: "'Roboto Mono', monospace", size: 10 }, color: '#5a7385', stepSize: 5, callback: v => Number.isInteger(v) ? v : '' },
+        border: { color: '#25404f' }
+      },
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'KG (最重組)', font: { family: "'Roboto Mono', monospace", size: 10, weight: 700 }, color: '#5a7385' },
+        grid: { color: '#15252f' },
+        ticks: { font: { family: "'Roboto Mono', monospace", size: 10 }, color: '#5a7385', callback: v => v + 'kg' },
+        border: { display: false }
+      }
+    }
+  };
+}
+
+new Chart(document.getElementById('strengthChartLower').getContext('2d'), {
+  type: 'line', data: { datasets: lowerDatasets }, options: strengthChartOptions()
+});
+new Chart(document.getElementById('strengthChartUpper').getContext('2d'), {
+  type: 'line', data: { datasets: upperDatasets }, options: strengthChartOptions()
+});
+
+// Custom clickable legends (primary lines shown, secondary dimmed by default)
+function buildStrengthLegend(containerId, chartId, datasets) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  datasets.forEach((ds, i) => {
+    const item = document.createElement('div');
+    item.className = 'l-item';
+    item.style.cursor = 'pointer';
+    item.style.opacity = ds.hidden ? '0.35' : '1';
+    item.innerHTML = `<span class="l-dot" style="background:${ds.borderColor};width:16px;height:0;border-top:${ds.borderWidth}px solid ${ds.borderColor};"></span>${ds.label}`;
+    item.addEventListener('click', () => {
+      const chart = Chart.getChart(chartId);
+      const meta = chart.getDatasetMeta(i);
+      const isHidden = meta.hidden === null ? chart.data.datasets[i].hidden : meta.hidden;
+      meta.hidden = !isHidden;
+      item.style.opacity = meta.hidden ? '0.35' : '1';
+      chart.update();
+    });
+    container.appendChild(item);
+  });
+}
+buildStrengthLegend('strength-legend-lower', 'strengthChartLower', lowerDatasets);
+buildStrengthLegend('strength-legend-upper', 'strengthChartUpper', upperDatasets);
 
 // ===== EXERCISE EXPLORER LOGIC =====
 function canonicalName(n) {
